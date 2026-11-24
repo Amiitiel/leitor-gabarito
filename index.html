@@ -12,6 +12,7 @@ main{max-width:640px;margin:0 auto;padding:12px}
 #box{position:relative;aspect-ratio:3/4;background:#000;border-radius:12px;overflow:hidden}
 #vid,#ov{position:absolute;inset:0;width:100%;height:100%}
 #vid{object-fit:cover}
+#zbtn{position:absolute;bottom:10px;right:10px;z-index:2;padding:8px 14px;border-radius:20px;background:rgba(0,0,0,.65);color:#fff;border:1px solid rgba(255,255,255,.35);font-size:14px;cursor:pointer;display:none}
 #out{width:100%;height:auto;display:block;border-radius:12px}
 #st{margin:10px 0;padding:10px 12px;border-radius:10px;background:var(--card);font-size:15px}
 details{background:var(--card);border-radius:10px;padding:10px 12px;margin:8px 0}
@@ -29,7 +30,11 @@ button,label.b{flex:1;padding:12px;border:0;border-radius:10px;background:var(--
 .k{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
 </style></head><body><main>
 <div id="cam">
- <div id="box"><video id="vid" playsinline muted autoplay></video><canvas id="ov" width="480" height="640"></canvas></div>
+ <div id="box">
+  <video id="vid" playsinline muted autoplay></video>
+  <canvas id="ov" width="480" height="640"></canvas>
+  <button id="zbtn" type="button">Zoom 1x</button>
+ </div>
  <div id="st">Iniciando câmera…</div>
  <details><summary>Questões e gabarito</summary><div class="cfg">
   <label>Nº de questões <select id="n"></select></label>
@@ -45,9 +50,9 @@ button,label.b{flex:1;padding:12px;border:0;border-radius:10px;background:var(--
 </div>
 </main>
 <script>
-const $=id=>document.getElementById(id),vid=$("vid"),ov=$("ov"),octx=ov.getContext("2d"),box=$("box");
+const $=id=>document.getElementById(id),vid=$("vid"),ov=$("ov"),octx=ov.getContext("2d"),box=$("box"),zbtn=$("zbtn");
 const dw=320;let dh=240;const dc=document.createElement("canvas"),dctx=dc.getContext("2d",{willReadFrequently:true});
-let N=20,KEY="CACDBABCCACBDBCDBDAC".split(""),running=false,stable=0,prev=null;
+let N=20,KEY="CACDBABCCACBDBCDBDAC".split(""),running=false,stable=0,prev=null,vTrack=null,zSteps=[1],zIdx=0;
 try{const s=JSON.parse(localStorage.getItem("gab")||"null");
  if(s&&Array.isArray(s.key)&&s.key.length===20&&s.key.every(l=>"ABCDE".includes(l))&&s.n>=1&&s.n<=20){KEY=s.key;N=s.n}}catch(e){}
 const save=()=>{try{localStorage.setItem("gab",JSON.stringify({n:N,key:KEY}))}catch(e){}};
@@ -63,10 +68,37 @@ nsel.onchange=()=>{N=+nsel.value;save();sync()};
 $("txt").onchange=e=>{const L=e.target.value.toUpperCase().replace(/[^A-E]/g,"");if(L){N=Math.min(20,L.length);for(let i=0;i<N;i++)KEY[i]=L[i];save()}sync()};
 sync();
 
-// ---------- detecção dos 4 quadrados ----------
+// ---------- detecção refinada dos 4 quadrados ----------
 function otsu(g){const h=new Uint32Array(256);for(let i=0;i<g.length;i++)h[g[i]]++;const n=g.length;let s=0;for(let i=0;i<256;i++)s+=i*h[i];
  let sb=0,wb=0,best=0,t=100;for(let i=0;i<256;i++){wb+=h[i];if(!wb)continue;const wf=n-wb;if(!wf)break;sb+=i*h[i];
- const mb=sb/wb,mf=(s-sb)/wf,v=wb*wf*(mb-mf)**2;if(v>best){best=v;t=i}}return Math.min(t,110)}
+ const mb=sb/wb,mf=(s-sb)/wf,v=wb*wf*(mb-mf)**2;if(v>best){best=v;t=i}}return Math.min(t,115)}
+
+// Verifica se há papel branco ao redor do quadrado (elimina sombras e objetos escuros)
+function hasWhiteBorder(g,w,h,x0,x1,y0,y1,t){
+ const pad=Math.max(2,Math.round((x1-x0)*0.35));
+ const rx0=Math.max(0,x0-pad),rx1=Math.min(w-1,x1+pad),ry0=Math.max(0,y0-pad),ry1=Math.min(h-1,y1+pad);
+ let sum=0,cnt=0;
+ for(let x=rx0;x<=rx1;x+=2){sum+=g[ry0*w+x]+g[ry1*w+x];cnt+=2}
+ for(let y=ry0;y<=ry1;y+=2){sum+=g[y*w+rx0]+g[y*w+rx1];cnt+=2}
+ return cnt>0 && (sum/cnt) > Math.max(t+35, 130);
+}
+
+// Mede nitidez (variância do Laplaciano) dentro do gabarito
+function getSharpness(g,w,h,q){
+ const xs=q.map(p=>p.x),ys=q.map(p=>p.y);
+ const x0=Math.max(1,Math.floor(Math.min(...xs))),x1=Math.min(w-2,Math.ceil(Math.max(...xs)));
+ const y0=Math.max(1,Math.floor(Math.min(...ys))),y1=Math.min(h-2,Math.ceil(Math.max(...ys)));
+ let sum=0,cnt=0;
+ for(let y=y0;y<=y1;y+=2){
+  for(let x=x0;x<=x1;x+=2){
+   const i=y*w+x;
+   const lap=Math.abs(4*g[i]-g[i-1]-g[i+1]-g[i-w]-g[i+w]);
+   sum+=lap;cnt++;
+  }
+ }
+ return cnt?sum/cnt:0;
+}
+
 function findCorners(d,w,h){
  const g=new Uint8Array(w*h);for(let i=0;i<w*h;i++)g[i]=(d[i*4]*3+d[i*4+1]*6+d[i*4+2])/10;
  const t=otsu(g),seen=new Uint8Array(w*h),st=new Int32Array(w*h),pts=[];
@@ -78,15 +110,35 @@ function findCorners(d,w,h){
    if(y>0&&!seen[p-w]&&g[p-w]<t){seen[p-w]=1;st[sp++]=p-w}
    if(y<h-1&&!seen[p+w]&&g[p+w]<t){seen[p+w]=1;st[sp++]=p+w}}
   const bw=x1-x0+1,bh=y1-y0+1;
-  if(bw>w*.008&&bw<w*.09&&bh>w*.008&&bh<w*.09&&bw/bh>.7&&bw/bh<1.4&&c/(bw*bh)>.85)pts.push({x:(x0+x1)/2,y:(y0+y1)/2});}
+  // Filtro mais estrito de proporção, preenchimento e borda branca
+  if(bw>w*.012&&bw<w*.085&&bh>w*.012&&bh<w*.085&&bw/bh>.75&&bw/bh<1.33&&c/(bw*bh)>.82){
+   if(hasWhiteBorder(g,w,h,x0,x1,y0,y1,t)){
+    pts.push({x:(x0+x1)/2,y:(y0+y1)/2,sz:(bw+bh)/2});
+   }
+  }
+ }
  if(pts.length<4)return null;
+
  const pick=f=>pts.reduce((a,b)=>f(b)>f(a)?b:a);
  const TL=pick(p=>-(p.x+p.y)),BR=pick(p=>p.x+p.y),TR=pick(p=>p.x-p.y),BL=pick(p=>p.y-p.x);
  const q=[TL,TR,BR,BL];if(new Set(q).size<4)return null;
- const W=Math.hypot(TR.x-TL.x,TR.y-TL.y),H=Math.hypot(BL.x-TL.x,BL.y-TL.y);
- if(W<w*.3||H<w*.3||W/H<.7||W/H>1.5)return null;
- return q;
+
+ // 1. Consistência de tamanho entre os 4 quadrados
+ const szs=q.map(p=>p.sz),minS=Math.min(...szs),maxS=Math.max(...szs);
+ if(maxS/minS>1.55)return null;
+
+ // 2. Validação geométrica dos 4 lados e diagonais
+ const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+ const top=dist(TL,TR),bot=dist(BL,BR),left=dist(TL,BL),right=dist(TR,BR);
+ const d1=dist(TL,BR),d2=dist(TR,BL);
+ if(top<w*.3||left<w*.3)return null;
+ if(top/bot<.78||top/bot>1.28||left/right<.78||left/right>1.28)return null;
+ if(d1/d2<.78||d1/d2>1.28)return null;
+ if(top/left<.75||top/left>1.35)return null;
+
+ return {q, sharp: getSharpness(g,w,h,q)};
 }
+
 // ---------- leitura das bolhas ----------
 function map(q,u,v){const[TL,TR,BR,BL]=q;
  return{x:(1-u)*(1-v)*TL.x+u*(1-v)*TR.x+u*v*BR.x+(1-u)*v*BL.x,y:(1-u)*(1-v)*TL.y+u*(1-v)*TR.y+u*v*BR.y+(1-u)*v*BL.y}}
@@ -98,7 +150,7 @@ function analyze(ctx,q,W,H){
  const img=ctx.getImageData(0,0,W,H),side=Math.hypot(q[1].x-q[0].x,q[1].y-q[0].y),sr=Math.max(3,side*.012);
  return K().map((key,i)=>{
   const L=[0,1,2,3,4].map(k=>{const p=bub(q,i,k);return lumAt(img,p.x,p.y,sr)});
-  const med=[...L].sort((a,b)=>a-b)[2],m=L.map((v,k)=>v<med-45?k:-1).filter(k=>k>=0);
+  const med=[...L].sort((a,b)=>a-b)[2],m=L.map((v,k)=>v<med-40?k:-1).filter(k=>k>=0);
   const kk="ABCDE".indexOf(key);
   if(!m.length)return{st:"blank",key:kk};
   if(m.length>1)return{st:"double",key:kk,m};
@@ -112,8 +164,9 @@ function draw(ctx,q,res){
   else if(r.st==="bad"){ring(bub(q,i,r.m[0]),"#dc2626");ring(kp,"#16a34a",1)}
   else{ring(kp,"#d97706",1);if(r.m)r.m.forEach(k=>ring(bub(q,i,k),"#d97706"))}});
 }
+
 // ---------- resultado ----------
-function stopCam(){running=false;if(vid.srcObject)vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null}
+function stopCam(){running=false;if(vid.srcObject)vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;vTrack=null}
 function show(src,q,W,H){
  const out=$("out");out.width=W;out.height=H;const c=out.getContext("2d",{willReadFrequently:true});c.drawImage(src,0,0,W,H);
  const res=analyze(c,q,W,H);draw(c,q,res);
@@ -127,48 +180,89 @@ function show(src,q,W,H){
   :`<div style="color:var(--warn)">Q${n}: dupla marcação (${r.m.map(lab).join("+")}) — revisar</div>`}).join(""):"<div>Todas corretas.</div>";
  $("list").innerHTML=h;$("cam").style.display="none";$("res").style.display="block";stopCam();
 }
-// ---------- câmera ao vivo ----------
+
+// ---------- câmera ao vivo + foco e zoom ----------
 function guide(w,h){let gw=w*.78,gh=gw/1.03;if(gh>h*.88){gh=h*.88;gw=gh*1.03}
  const x=(w-gw)/2,y=(h-gh)/2;return[{x,y},{x:x+gw,y},{x:x+gw,y:y+gh},{x,y:y+gh}]}
 function sq(P,s,c,fill){octx.strokeStyle=c;octx.fillStyle=c;octx.lineWidth=1.6;
  P.forEach(p=>{if(fill){octx.globalAlpha=.45;octx.fillRect(p.x-s/2,p.y-s/2,s,s);octx.globalAlpha=1}octx.strokeRect(p.x-s/2,p.y-s/2,s,s)})}
+
+async function applyZoom(val){
+ if(!vTrack)return;
+ try{await vTrack.applyConstraints({advanced:[{zoom:val}]});zbtn.textContent="Zoom "+val+"x"}catch(e){}
+}
+zbtn.onclick=()=>{zIdx=(zIdx+1)%zSteps.length;applyZoom(zSteps[zIdx])};
+
 async function start(){
- $("res").style.display="none";$("cam").style.display="block";stable=0;prev=null;
- try{vid.srcObject=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false});
+ $("res").style.display="none";$("cam").style.display="block";stable=0;prev=null;zbtn.style.display="none";
+ try{
+  const stream=await navigator.mediaDevices.getUserMedia({
+   video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false
+  });
+  vid.srcObject=stream;
+  vTrack=stream.getVideoTracks()[0];
+
+  // Configura foco contínuo e opções de zoom se o aparelho suportar
+  if(vTrack && vTrack.getCapabilities){
+   const caps=vTrack.getCapabilities(),adv=[];
+   if(caps.focusMode && caps.focusMode.includes("continuous"))adv.push({focusMode:"continuous"});
+   if(caps.zoom && caps.zoom.max>=1.5){
+    zSteps=[1,1.5];if(caps.zoom.max>=2)zSteps.push(2);
+    zIdx=1; // inicia em 1.5x para permitir afastar o celular e manter o foco nítido
+    adv.push({zoom:zSteps[zIdx]});
+    zbtn.textContent="Zoom "+zSteps[zIdx]+"x";zbtn.style.display="block";
+   }
+   if(adv.length)try{await vTrack.applyConstraints({advanced:adv})}catch(e){}
+  }
+
   await vid.play();const vw=vid.videoWidth,vh=vid.videoHeight;
   box.style.aspectRatio=vw+"/"+vh;dh=Math.round(dw*vh/vw);dc.width=dw;dc.height=dh;ov.width=640;ov.height=Math.round(640*vh/vw);
   running=true;$("st").textContent="Encaixe os 4 quadrados pretos do cartão nos cantos do guia.";tick();
- }catch(e){$("st").textContent="Câmera bloqueada ou indisponível ("+(e&&e.name||"erro")+"). Toque em “Enviar foto” para fotografar o cartão."}
+ }catch(e){$("st").textContent="Câmera bloqueada ou indisponível ("+(e&&e.name||"erro")+"). Toque em “Enviar foto”."}
 }
+
 function tick(){
  if(!running)return;const t0=performance.now();
- dctx.drawImage(vid,0,0,dw,dh);const q=findCorners(dctx.getImageData(0,0,dw,dh).data,dw,dh),G=guide(dw,dh);
+ dctx.drawImage(vid,0,0,dw,dh);
+ const det=findCorners(dctx.getImageData(0,0,dw,dh).data,dw,dh),G=guide(dw,dh);
+ const q=det?det.q:null;
  const f=ov.width/dw;octx.setTransform(f,0,0,f,0,0);octx.clearRect(0,0,dw,dh);
  const near=q&&q.every((p,i)=>Math.hypot(p.x-G[i].x,p.y-G[i].y)<dw*.12);
  sq(G,Math.hypot(G[1].x-G[0].x,G[1].y-G[0].y)*.047,near?"#16a34a":"#ffffff",false);
- if(q){const side=Math.hypot(q[1].x-q[0].x,q[1].y-q[0].y),sz=side/dw;sq(q,side*.047,"#16a34a",true);
+
+ if(q){
+  const side=Math.hypot(q[1].x-q[0].x,q[1].y-q[0].y),sz=side/dw;
+  const sharpOk=det.sharp>10; // limiar de nitidez
+  sq(q,side*.047,sharpOk?"#16a34a":"#d97706",true);
   const moved=prev?Math.max(...q.map((p,i)=>Math.hypot(p.x-prev[i].x,p.y-prev[i].y))):99;
-  stable=moved<dw*.02&&sz>.45?stable+1:0;prev=q;
-  $("st").textContent=sz>.45?"Quadrados detectados. Segure firme… "+Math.min(stable,4)+"/4":"Aproxime o cartão até os quadrados coincidirem com o guia.";
+  stable=(moved<dw*.02 && sz>.45 && sharpOk)?stable+1:0;prev=q;
+  if(!sharpOk){
+   $("st").textContent="Foco borrado. Afaste um pouco o celular (use o botão Zoom se precisar).";
+  }else{
+   $("st").textContent=sz>.45?"Quadrados detectados. Segure firme… "+Math.min(stable,4)+"/4":"Aproxime o cartão até os quadrados coincidirem com o guia.";
+  }
   if(stable>=4){capture(q);return}
  }else{stable=0;prev=null;$("st").textContent="Encaixe os 4 quadrados pretos do cartão nos cantos do guia."}
  setTimeout(tick,Math.max(0,110-(performance.now()-t0)));
 }
+
 function capture(q){
  running=false;const W=vid.videoWidth,H=vid.videoHeight,cv=document.createElement("canvas");cv.width=W;cv.height=H;cv.getContext("2d").drawImage(vid,0,0);
  const rw=960,rh=Math.round(960*H/W),rc=document.createElement("canvas");rc.width=rw;rc.height=rh;
  const rx=rc.getContext("2d",{willReadFrequently:true});rx.drawImage(cv,0,0,rw,rh);
- const r=findCorners(rx.getImageData(0,0,rw,rh).data,rw,rh);
+ const det=findCorners(rx.getImageData(0,0,rw,rh).data,rw,rh);
+ const r=det?det.q:null;
  show(cv,r?r.map(p=>({x:p.x*W/rw,y:p.y*H/rh})):q.map(p=>({x:p.x*W/dw,y:p.y*H/dh})),W,H);
 }
+
 // ---------- foto enviada ----------
 $("file").onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();
  im.onload=()=>{const s=Math.min(1,1800/Math.max(im.width,im.height)),W=Math.round(im.width*s),H=Math.round(im.height*s);
   const cv=document.createElement("canvas");cv.width=W;cv.height=H;cv.getContext("2d").drawImage(im,0,0,W,H);
   const sw=960,sh=Math.round(960*H/W),sc=document.createElement("canvas");sc.width=sw;sc.height=sh;const sx=sc.getContext("2d",{willReadFrequently:true});sx.drawImage(im,0,0,sw,sh);
-  const q=findCorners(sx.getImageData(0,0,sw,sh).data,sw,sh);
-  if(!q){$("st").textContent="Não achei os 4 quadrados nessa foto. Enquadre o cartão inteiro e tente de novo.";return}
-  stopCam();show(cv,q.map(p=>({x:p.x*W/sw,y:p.y*H/sh})),W,H)};
+  const det=findCorners(sx.getImageData(0,0,sw,sh).data,sw,sh);
+  if(!det){$("st").textContent="Não achei os 4 quadrados nessa foto. Enquadre o cartão inteiro e tente de novo.";return}
+  stopCam();show(cv,det.q.map(p=>({x:p.x*W/sw,y:p.y*H/sh})),W,H)};
  im.src=URL.createObjectURL(f);e.target.value=""};
 $("again").onclick=start;
 start();
