@@ -103,6 +103,14 @@ function show(src,q,W,H){
  $("list").innerHTML=h;$("cam").style.display="none";$("res").style.display="block";running=false;
  if(vid.srcObject)vid.srcObject.getTracks().forEach(t=>t.stop());vid.srcObject=null;
 }
+// ---------- guia na tela ----------
+function guide(w,h){let gw=w*.78,gh=gw/1.03;if(gh>h*.88){gh=h*.88;gw=gh*1.03}
+ const x=(w-gw)/2,y=(h-gh)/2;return[{x,y},{x:x+gw,y},{x:x+gw,y:y+gh},{x,y:y+gh}]}
+function drawGrid(q,c,a){const R=Math.hypot(q[1].x-q[0].x,q[1].y-q[0].y)*.027;vctx.save();vctx.strokeStyle=c;vctx.globalAlpha=a;vctx.lineWidth=1.5;
+ for(let i=0;i<20;i++)for(let k=0;k<5;k++){const p=bub(q,i,k);vctx.beginPath();vctx.arc(p.x,p.y,R,0,7);vctx.stroke()}vctx.restore()}
+function drawGuide(G,c,grid){const s=Math.hypot(G[1].x-G[0].x,G[1].y-G[0].y)*.047;vctx.save();vctx.strokeStyle=c;vctx.lineWidth=3;vctx.setLineDash([8,6]);
+ vctx.beginPath();G.forEach((p,i)=>i?vctx.lineTo(p.x,p.y):vctx.moveTo(p.x,p.y));vctx.closePath();vctx.stroke();vctx.setLineDash([]);
+ G.forEach(p=>vctx.strokeRect(p.x-s/2,p.y-s/2,s,s));vctx.restore();if(grid)drawGrid(G,c,.45)}
 // ---------- câmera ao vivo ----------
 async function start(){
  $("res").style.display="none";$("cam").style.display="block";stable=0;prev=null;
@@ -114,12 +122,14 @@ function loop(){
  if(!running)return;
  if(vid.videoWidth){const w=640,h=Math.round(640*vid.videoHeight/vid.videoWidth);view.width=w;view.height=h;vctx.drawImage(vid,0,0,w,h);
   const q=findCorners(vctx.getImageData(0,0,w,h).data,w,h);
-  if(q){vctx.beginPath();q.forEach((p,i)=>i?vctx.lineTo(p.x,p.y):vctx.moveTo(p.x,p.y));vctx.closePath();vctx.strokeStyle="#16a34a";vctx.lineWidth=4;vctx.stroke();
+  const G=guide(w,h),near=q&&q.every((p,i)=>Math.hypot(p.x-G[i].x,p.y-G[i].y)<w*.1);
+  drawGuide(G,near?"#16a34a":"#ffffff",!q);
+  if(q){vctx.beginPath();q.forEach((p,i)=>i?vctx.lineTo(p.x,p.y):vctx.moveTo(p.x,p.y));vctx.closePath();vctx.strokeStyle="#16a34a";vctx.lineWidth=4;vctx.stroke();drawGrid(q,"#16a34a",.8);
    const moved=prev?Math.max(...q.map((p,i)=>Math.hypot(p.x-prev[i].x,p.y-prev[i].y))):99;
-   stable=moved<w*.02?stable+1:0;prev=q;$("st").textContent="Cartão detectado. Segure firme… "+Math.min(stable,6)+"/6";
+   const sz=Math.hypot(q[1].x-q[0].x,q[1].y-q[0].y)/w;stable=moved<w*.02&&sz>.5?stable+1:0;prev=q;$("st").textContent=sz>.5?"Cartão detectado. Segure firme… "+Math.min(stable,6)+"/6":"Aproxime o cartão até os quadrados coincidirem com o guia.";
    if(stable>=6){const W=vid.videoWidth,H=vid.videoHeight,f=W/w,cv=document.createElement("canvas");cv.width=W;cv.height=H;cv.getContext("2d").drawImage(vid,0,0);
     show(cv,q.map(p=>({x:p.x*f,y:p.y*f})),W,H);return}
-  }else{stable=0;prev=null;$("st").textContent="Procurando os 4 quadrados pretos…"}}
+  }else{stable=0;prev=null;$("st").textContent="Encaixe os 4 quadrados pretos do cartão nos cantos do guia."}}
  setTimeout(()=>requestAnimationFrame(loop),90);
 }
 // ---------- foto enviada ----------
