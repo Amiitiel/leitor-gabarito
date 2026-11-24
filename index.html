@@ -39,7 +39,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .score b{font-size:34px;display:block}.score span{color:var(--mut);font-size:13px}
 #list{background:var(--card);border-radius:12px;padding:10px 14px;font-size:14px;line-height:1.6}
 .k{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
-.small{font-size:12px;color:var(--mut)}
 @media(max-width:420px){main{padding:8px}#grid{grid-template-columns:repeat(3,1fr)}}
 </style>
 </head>
@@ -49,7 +48,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <div id="cameraArea">
     <div id="box"><video id="vid" playsinline muted autoplay></video><canvas id="ov" width="480" height="640"></canvas></div>
     <div id="st">Iniciando câmera…</div>
-    <details open>
+    <details>
       <summary>Controles de câmera e foco</summary>
       <div class="cfg">
         <div id="camInfo">Verificando os recursos disponíveis no aparelho…</div>
@@ -65,25 +64,24 @@ button:disabled{opacity:.55;cursor:not-allowed}
           <input id="zoom" type="range">
         </label>
         <div class="row"><button id="refocus" type="button">Reajustar foco</button></div>
-        <div class="hint">O programa prioriza o autofoco contínuo. Toque na imagem da câmera ou em “Reajustar foco” para solicitar uma nova tentativa. O foco manual e o zoom só aparecem quando são oferecidos pelo aparelho. O zoom pode ser digital; respeite a distância mínima de foco da lente.</div>
+        <div class="hint">Dica: se a lente não focar de muito perto, afaste o celular uns 10 cm e aumente o Zoom acima (1.5× ou 2×).</div>
       </div>
     </details>
   </div>
-  <details id="configDetails" open>
+  <details id="configDetails">
     <summary>Questões e gabarito</summary>
     <div class="cfg">
-      <label>Nº de questões (1 a 50) <select id="n" autocomplete="off"><option value="1">1 questões</option><option value="2">2 questões</option><option value="3">3 questões</option><option value="4">4 questões</option><option value="5">5 questões</option><option value="6">6 questões</option><option value="7">7 questões</option><option value="8">8 questões</option><option value="9">9 questões</option><option value="10">10 questões</option><option value="11">11 questões</option><option value="12">12 questões</option><option value="13">13 questões</option><option value="14">14 questões</option><option value="15">15 questões</option><option value="16">16 questões</option><option value="17">17 questões</option><option value="18">18 questões</option><option value="19">19 questões</option><option value="20" selected>20 questões</option><option value="21">21 questões</option><option value="22">22 questões</option><option value="23">23 questões</option><option value="24">24 questões</option><option value="25">25 questões</option><option value="26">26 questões</option><option value="27">27 questões</option><option value="28">28 questões</option><option value="29">29 questões</option><option value="30">30 questões</option><option value="31">31 questões</option><option value="32">32 questões</option><option value="33">33 questões</option><option value="34">34 questões</option><option value="35">35 questões</option><option value="36">36 questões</option><option value="37">37 questões</option><option value="38">38 questões</option><option value="39">39 questões</option><option value="40">40 questões</option><option value="41">41 questões</option><option value="42">42 questões</option><option value="43">43 questões</option><option value="44">44 questões</option><option value="45">45 questões</option><option value="46">46 questões</option><option value="47">47 questões</option><option value="48">48 questões</option><option value="49">49 questões</option><option value="50">50 questões</option></select></label>
+      <label>Nº de questões (1 a 50) <select id="n" autocomplete="off"></select></label>
       <label>Valor total da prova (pontos) <input id="examValue" type="number" inputmode="decimal" min="0.01" max="10000" step="0.01" value="10"></label>
       <div class="value-readout"><span>Valor de cada questão</span><strong id="perQuestion">0,50 ponto</strong></div>
       <label>Gabarito em texto (até 50 respostas; ex.: CACDB…) <input id="txt" autocomplete="off" spellcheck="false" maxlength="50"></label>
       <div id="grid"></div>
-      <div class="hint">O seletor oferece de 1 a 50 questões. Até 20: leitura em 2 colunas de 10. De 21 a 50: leitura em 2 colunas de até 25; a folha física precisa seguir esse formato.</div>
+      <div class="hint">Até 20: 2 colunas de 10. De 21 a 50: 2 colunas de até 25.</div>
       <div class="row"><label class="b">Enviar foto da prova<input id="file" type="file" accept="image/*" capture="environment" hidden></label></div>
       <div class="export-actions">
         <button id="saveReport" type="button" disabled>Baixar arquivo da prova corrigida</button>
         <button id="printReport" type="button" disabled>Imprimir / salvar como PDF</button>
       </div>
-      <div class="hint">Depois de corrigir uma folha, use os botões acima para guardar um relatório com a imagem anotada, a nota e o resultado de cada questão. Para gerar PDF, escolha “Salvar como PDF” na janela de impressão.</div>
     </div>
   </details>
 </div>
@@ -97,11 +95,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <script>
 'use strict';
 const $=id=>document.getElementById(id),vid=$("vid"),ov=$("ov"),octx=ov.getContext("2d"),box=$("box");
-// 480 px mantém mais detalhe para localizar os marcadores do que os 320 px da versão anterior.
-const dw=480;let dh=360;
+const dw=400;let dh=300;
 const dc=document.createElement("canvas"),dctx=dc.getContext("2d",{willReadFrequently:true});
 let N=20,KEY="CACDBABCCACBDBCDBDAC".split(""),EXAM_VALUE=10,running=false,stable=0,prev=null,streamTrack=null,cameraCaps=null,lastCorrection=null;
-let focusReadyAt=0,lastFocusKick=0;
+
 try{
   const s=JSON.parse(localStorage.getItem("gab")||"null");
   if(s&&Array.isArray(s.key)&&s.key.length>=1&&s.key.length<=50&&s.key.every(l=>"ABCDE".includes(l))&&Number.isInteger(s.n)&&s.n>=1&&s.n<=50&&s.key.length>=s.n){KEY=s.key;N=Math.min(50,Math.max(1,s.n));}
@@ -113,7 +110,8 @@ const save=()=>{try{localStorage.setItem("gab",JSON.stringify({n:N,key:KEY,examV
 const K=()=>KEY.slice(0,N);
 
 // ---------- configuração do gabarito ----------
-const nsel=$("n"); // As opções de 1 a 50 já estão no HTML para não depender da inicialização do JavaScript.
+const nsel=$("n");
+for(let i=1;i<=50;i++)nsel.add(new Option(i+(i===1?" questão":" questões"),i));
 function sync(){
   ensureKeyLength();nsel.value=N;$("txt").value=K().join("");const g=$("grid");g.innerHTML="";
   for(let i=0;i<N;i++){
@@ -133,7 +131,7 @@ const examValueInput=$("examValue");
 function fmtPoints(v){return Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
 function updatePoints(){
   const per=EXAM_VALUE/N;
-  $("perQuestion").textContent=fmtPoints(per)+ (Math.abs(per-1)<0.000001?" ponto":" pontos");
+  $("perQuestion").textContent=fmtPoints(per)+(Math.abs(per-1)<0.000001?" ponto":" pontos");
   if(lastCorrection)renderScore();
 }
 examValueInput.value=String(EXAM_VALUE);
@@ -144,14 +142,32 @@ examValueInput.onchange=()=>{
 };
 updatePoints();
 
-// ---------- detecção dos quatro marcadores ----------
+// ---------- detecção rigorosa dos 4 marcadores ----------
 function otsu(g){
   const h=new Uint32Array(256);for(let i=0;i<g.length;i++)h[g[i]]++;
   const n=g.length;let s=0;for(let i=0;i<256;i++)s+=i*h[i];
   let sb=0,wb=0,best=0,t=100;
   for(let i=0;i<256;i++){wb+=h[i];if(!wb)continue;const wf=n-wb;if(!wf)break;sb+=i*h[i];const mb=sb/wb,mf=(s-sb)/wf,v=wb*wf*(mb-mf)**2;if(v>best){best=v;t=i}}
-  // Evita que sombras cinzentas sejam tratadas como tinta preta.
-  return Math.min(t,110);
+  return Math.min(t,115);
+}
+function hasWhiteBorder(g,w,h,x0,x1,y0,y1,t){
+  const pad=Math.max(2,Math.round((x1-x0)*0.35));
+  const rx0=Math.max(0,x0-pad),rx1=Math.min(w-1,x1+pad),ry0=Math.max(0,y0-pad),ry1=Math.min(h-1,y1+pad);
+  let sum=0,cnt=0;
+  for(let x=rx0;x<=rx1;x+=2){sum+=g[ry0*w+x]+g[ry1*w+x];cnt+=2}
+  for(let y=ry0;y<=ry1;y+=2){sum+=g[y*w+rx0]+g[y*w+rx1];cnt+=2}
+  return cnt>0&&(sum/cnt)>Math.max(t+30,125);
+}
+function getSharpness(g,w,h,q){
+  const xs=q.map(p=>p.x),ys=q.map(p=>p.y);
+  const x0=Math.max(1,Math.floor(Math.min(...xs))),x1=Math.min(w-2,Math.ceil(Math.max(...xs)));
+  const y0=Math.max(1,Math.floor(Math.min(...ys))),y1=Math.min(h-2,Math.ceil(Math.max(...ys)));
+  let sum=0,cnt=0;
+  for(let y=y0;y<=y1;y+=2)for(let x=x0;x<=x1;x+=2){
+    const i=y*w+x;
+    sum+=Math.abs(4*g[i]-g[i-1]-g[i+1]-g[i-w]-g[i+w]);cnt++;
+  }
+  return cnt?sum/cnt:0;
 }
 function orderQuad(candidates){
   const cx=candidates.reduce((s,p)=>s+p.x,0)/4,cy=candidates.reduce((s,p)=>s+p.y,0)/4;
@@ -189,55 +205,84 @@ function findCorners(d,w,h){
       if(y<h-1&&!seen[p+w]&&g[p+w]<=t){seen[p+w]=1;stack[sp++]=p+w}
     }
     const bw=x1-x0+1,bh=y1-y0+1,aspect=bw/bh,fill=count/(bw*bh),size=Math.sqrt(bw*bh);
-    // Descarta letras, linhas, sombras e manchas muito pequenas ou grandes.
-    if(bw<minDim*.007||bh<minDim*.007||bw>minDim*.115||bh>minDim*.115)continue;
-    if(aspect<.72||aspect>1.39||fill<.62)continue;
+    // fill >= 0.80 rejeita bolhas pintadas (~0.75) e letras; hasWhiteBorder rejeita sombras/mesa
+    if(bw<minDim*.010||bh<minDim*.010||bw>minDim*.10||bh>minDim*.10)continue;
+    if(aspect<.75||aspect>1.33||fill<.80)continue;
+    if(!hasWhiteBorder(g,w,h,x0,x1,y0,y1,t))continue;
     pts.push({x:(x0+x1)/2,y:(y0+y1)/2,bw,bh,size,fill,shapeErr:Math.abs(Math.log(aspect))});
   }
   if(pts.length<4)return null;
-  // Limita a busca para evitar que texto ou ruído gere combinações demais.
-  pts.sort((a,b)=>(b.fill-b.shapeErr*.35+Math.log(b.size+1)*.025)-(a.fill-a.shapeErr*.35+Math.log(a.size+1)*.025));
-  const cand=pts.slice(0,28);let best=null,bestScore=-Infinity;
+  pts.sort((a,b)=>(b.fill-b.shapeErr*.4+Math.log(b.size+1)*.03)-(a.fill-a.shapeErr*.4+Math.log(a.size+1)*.03));
+  const cand=pts.slice(0,16);let best=null,bestScore=-Infinity;
   for(let a=0;a<cand.length-3;a++)for(let b=a+1;b<cand.length-2;b++)for(let c=b+1;c<cand.length-1;c++)for(let e=c+1;e<cand.length;e++){
     const group=[cand[a],cand[b],cand[c],cand[e]],q=orderQuad(group),m=quadMetrics(q,w,h);
-    if(!m.convex||m.minEdge<minDim*.24||m.areaRatio<.10||m.ratio<.62||m.ratio>1.62)continue;
-    if(m.parallelErr>.95||m.cornerCos>.94)continue;
+    if(!m.convex||m.minEdge<minDim*.26||m.areaRatio<.12||m.ratio<.68||m.ratio>1.48)continue;
+    if(m.parallelErr>.45||m.cornerCos>.45)continue;
     const sizes=group.map(p=>p.size),mean=sizes.reduce((s,v)=>s+v,0)/4;
     const cv=Math.sqrt(sizes.reduce((s,v)=>s+(v-mean)**2,0)/4)/mean;
-    if(Math.max(...sizes)/Math.min(...sizes)>2.35||cv>.48)continue;
+    if(Math.max(...sizes)/Math.min(...sizes)>1.65||cv>.28)continue;
     const avgFill=group.reduce((s,p)=>s+p.fill,0)/4,shape=group.reduce((s,p)=>s+p.shapeErr,0)/4;
-    // A combinação recebe pontos por componentes compactos, tamanhos semelhantes e geometria de folha.
-    const score=avgFill*1.65-shape*1.15-cv*1.25-Math.abs(Math.log(m.ratio/1.03))*.65-m.parallelErr*.55-m.cornerCos*.35+Math.min(m.areaRatio,.65)*.45;
+    const score=avgFill*1.8-shape*1.2-cv*1.5-Math.abs(Math.log(m.ratio/1.03))*.7-m.parallelErr*.8-m.cornerCos*.6+Math.min(m.areaRatio,.65)*.5;
     if(score>bestScore){bestScore=score;best=q;}
   }
-  if(!best||bestScore<.55)return null;
-  best.confidence=Math.max(0,Math.min(1,(bestScore-.55)/1.25));
+  if(!best||bestScore<.85)return null;
+  best.sharp=getSharpness(g,w,h,best);
   return best;
 }
 
+// ---------- homografia (corrige inclinação da câmera) ----------
+function makeHomography(q){
+  const [p0,p1,p2,p3]=q; // TL(0,0), TR(1,0), BR(1,1), BL(0,1)
+  const dx1=p1.x-p2.x,dy1=p1.y-p2.y,dx2=p3.x-p2.x,dy2=p3.y-p2.y;
+  const sx=p0.x-p1.x+p2.x-p3.x,sy=p0.y-p1.y+p2.y-p3.y;
+  const det=dx1*dy2-dx2*dy1||1e-9;
+  const g=(sx*dy2-sy*dx2)/det,h=(dx1*sy-dy1*sx)/det;
+  const a=p1.x-p0.x+g*p1.x,b=p3.x-p0.x+h*p3.x,c=p0.x;
+  const d=p1.y-p0.y+g*p1.y,e=p3.y-p0.y+h*p3.y,f=p0.y;
+  return (u,v)=>{const w=g*u+h*v+1;return {x:(a*u+b*v+c)/w,y:(d*u+e*v+f)/w};};
+}
+
 // ---------- leitura das bolhas ----------
-function map(q,u,v){const[TL,TR,BR,BL]=q;return{x:(1-u)*(1-v)*TL.x+u*(1-v)*TR.x+u*v*BR.x+(1-u)*v*BL.x,y:(1-u)*(1-v)*TL.y+u*(1-v)*TR.y+u*v*BR.y+(1-u)*v*BL.y}}
-function bub(q,i,k){
-  // Até 20 questões: mantém o cartão antigo (2 colunas × 10 linhas).
-  // De 21 a 50: considera o modelo de 2 colunas × 25 linhas.
-  // Para 50 questões, a folha física precisa seguir esse arranjo.
+function bub(Hmap,i,k){
   const rowsPerColumn=N<=20?10:25;
   const col=i<rowsPerColumn?0:1,r=i%rowsPerColumn;
   const v=.13+(.9445-.13)*(r/(rowsPerColumn-1));
-  return map(q,col?.625+.077*k:.13+.0695*k,v);
+  return Hmap(col?.625+.077*k:.13+.0695*k,v);
 }
-function lumAt(img,cx,cy,r){let s=0,n=0;for(let y=-r;y<=r;y+=2)for(let x=-r;x<=r;x+=2){if(x*x+y*y>r*r)continue;const px=Math.round(cx+x),py=Math.round(cy+y);if(px<0||py<0||px>=img.width||py>=img.height)continue;const o=(py*img.width+px)*4;s+=(img.data[o]*3+img.data[o+1]*6+img.data[o+2])/10;n++}return n?s/n:255}
+function lumAt(img,cx,cy,r){
+  let s=0,n=0;
+  for(let y=-r;y<=r;y+=2)for(let x=-r;x<=r;x+=2){
+    if(x*x+y*y>r*r)continue;
+    const px=Math.round(cx+x),py=Math.round(cy+y);
+    if(px<0||py<0||px>=img.width||py>=img.height)continue;
+    const o=(py*img.width+px)*4;s+=(img.data[o]*3+img.data[o+1]*6+img.data[o+2])/10;n++;
+  }
+  return n?s/n:255;
+}
 function analyze(ctx,q,W,H){
-  const img=ctx.getImageData(0,0,W,H),side=dist(q[0],q[1]),sr=Math.max(3,side*.012);
+  const img=ctx.getImageData(0,0,W,H),Hmap=makeHomography(q);
+  const side=dist(q[0],q[1]),sr=Math.max(3,side*(N>20?.009:.013));
   return K().map((key,i)=>{
-    const L=[0,1,2,3,4].map(k=>{const p=bub(q,i,k);return lumAt(img,p.x,p.y,sr)}),med=[...L].sort((a,b)=>a-b)[2],m=L.map((v,k)=>v<med-45?k:-1).filter(k=>k>=0),kk="ABCDE".indexOf(key);
-    if(!m.length)return{st:"blank",key:kk};if(m.length>1)return{st:"double",key:kk,m};return{st:m[0]===kk?"ok":"bad",key:kk,m:[m[0]]};
+    const L=[0,1,2,3,4].map(k=>{const p=bub(Hmap,i,k);return lumAt(img,p.x,p.y,sr);});
+    const sorted=[...L].sort((a,b)=>a-b);
+    const ref=sorted[3]; // 2ª mais clara como referência do papel na linha
+    const thresh=Math.max(28,ref*0.22);
+    const m=L.map((v,k)=>v<ref-thresh?k:-1).filter(k=>k>=0);
+    const kk="ABCDE".indexOf(key);
+    if(!m.length)return{st:"blank",key:kk};
+    if(m.length>1)return{st:"double",key:kk,m};
+    return{st:m[0]===kk?"ok":"bad",key:kk,m:[m[0]]};
   });
 }
 function draw(ctx,q,res){
-  const side=dist(q[0],q[1]),R=side*(N>20?.015:.027),lw=Math.max(3,side*.007);
+  const Hmap=makeHomography(q),side=dist(q[0],q[1]),R=side*(N>20?.015:.027),lw=Math.max(3,side*.007);
   const ring=(p,c,dash)=>{ctx.beginPath();ctx.arc(p.x,p.y,R,0,7);ctx.strokeStyle=c;ctx.lineWidth=lw;ctx.setLineDash(dash?[lw*1.5,lw*1.2]:[]);ctx.stroke();ctx.setLineDash([])};
-  res.forEach((r,i)=>{const kp=bub(q,i,r.key);if(r.st==="ok")ring(kp,"#16a34a");else if(r.st==="bad"){ring(bub(q,i,r.m[0]),"#dc2626");ring(kp,"#16a34a",1)}else{ring(kp,"#d97706",1);if(r.m)r.m.forEach(k=>ring(bub(q,i,k),"#d97706"))}});
+  res.forEach((r,i)=>{
+    const kp=bub(Hmap,i,r.key);
+    if(r.st==="ok")ring(kp,"#16a34a");
+    else if(r.st==="bad"){ring(bub(Hmap,i,r.m[0]),"#dc2626");ring(kp,"#16a34a",1)}
+    else{ring(kp,"#d97706",1);if(r.m)r.m.forEach(k=>ring(bub(Hmap,i,k),"#d97706"))}
+  });
 }
 
 // ---------- resultado ----------
@@ -260,7 +305,6 @@ function renderScore(){
   const earned=ok*(EXAM_VALUE/lastCorrection.questionCount);
   $("ac").textContent=ok+"/"+lastCorrection.questionCount;
   $("nt").textContent=fmtPoints(earned)+" / "+fmtPoints(EXAM_VALUE);
-  $("nt").title="Pontos obtidos / valor total da prova";
 }
 function reportHtml(){
   if(!lastCorrection)return null;
@@ -275,18 +319,17 @@ function reportHtml(){
   *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#202124;margin:24px;line-height:1.4}h1{font-size:24px;margin:0 0 4px}.meta{color:#555;font-size:12px;margin-bottom:18px}.summary{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0 20px}.metric{border:1px solid #bbb;border-radius:8px;padding:10px 14px;min-width:130px}.metric b{display:block;font-size:21px}.metric span{font-size:12px;color:#555}h2{font-size:17px;margin:20px 0 8px}img{display:block;width:100%;height:auto;border:1px solid #ddd;margin:8px 0 18px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:6px;border:1px solid #ccc;text-align:left}th{background:#eee}.ok{color:#16803d}.bad{color:#c5221f}.double,.blank{color:#a15c00}.foot{margin-top:14px;font-size:11px;color:#666}@media print{body{margin:12mm}.summary,.metric{break-inside:avoid}img{max-height:230mm;object-fit:contain}table{page-break-inside:auto}tr{page-break-inside:avoid;page-break-after:auto}thead{display:table-header-group}}
   </style></head><body><h1>Prova corrigida</h1><div class="meta">Gerado em ${date}</div>
   <div class="summary"><div class="metric"><b>${ok}/${n}</b><span>Acertos</span></div><div class="metric"><b>${fmtPoints(earned)} / ${fmtPoints(EXAM_VALUE)}</b><span>Pontuação</span></div><div class="metric"><b>${fmtPoints(per)}</b><span>Valor por questão</span></div></div>
-  <h2>Folha corrigida</h2><img src="${image}" alt="Imagem da folha com as marcações da correção"><h2>Resultado por questão</h2><table><thead><tr><th>Questão</th><th>Gabarito</th><th>Resposta identificada</th><th>Situação</th><th>Pontos</th></tr></thead><tbody>${rows}</tbody></table><div class="foot">Questões em branco, com marcação fraca ou dupla devem ser conferidas visualmente. Este relatório reproduz a leitura automática do sistema.</div></body></html>`;
+  <h2>Folha corrigida</h2><img src="${image}" alt="Folha corrigida"><h2>Resultado por questão</h2><table><thead><tr><th>Questão</th><th>Gabarito</th><th>Resposta identificada</th><th>Situação</th><th>Pontos</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
 }
 function downloadReport(){
   const html=reportHtml();if(!html)return;
   const blob=new Blob([html],{type:"text/html;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
-  const stamp=new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
-  a.href=url;a.download="prova_corrigida_"+stamp+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  a.href=url;a.download="prova_corrigida_"+new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 function printReport(){
   const html=reportHtml();if(!html)return;
   const win=window.open("","_blank");
-  if(!win){alert("O navegador bloqueou a janela de impressão. Permita janelas pop-up para este arquivo e tente novamente.");return;}
+  if(!win){alert("Permita janelas pop-up para imprimir.");return;}
   win.document.open();win.document.write(html);win.document.close();
   win.setTimeout(()=>{win.focus();win.print();},700);
 }
@@ -297,34 +340,8 @@ $("printReport").onclick=printReport;
 function formatDistance(v){return v<1?(v*100).toFixed(1)+" cm":v.toFixed(2)+" m"}
 function setRange(el,cap,value){el.min=cap.min;el.max=cap.max;el.step=cap.step||"any";el.value=value??cap.min}
 async function applyAdvanced(settings){
-  if(!streamTrack||!streamTrack.applyConstraints)throw new Error("Controles não disponíveis");
-  try{
-    await streamTrack.applyConstraints({advanced:[settings]});
-  }catch(firstError){
-    // Alguns navegadores aceitam focusMode como restrição ideal, mas não em advanced.
-    if(settings.focusMode)await streamTrack.applyConstraints({focusMode:{ideal:settings.focusMode}});
-    else throw firstError;
-  }
-}
-async function requestRefocus({temporary=true}={}){
-  if(!streamTrack)return false;
-  const modes=cameraCaps&&cameraCaps.focusMode||[];
-  lastFocusKick=performance.now();
-  try{
-    // Prefere foco único para provocar uma nova busca e retorna ao contínuo.
-    if(temporary&&modes.includes("single-shot")){
-      await applyAdvanced({focusMode:"single-shot"});
-      if(modes.includes("continuous"))setTimeout(()=>applyAdvanced({focusMode:"continuous"}).catch(()=>{}),700);
-      lastFocusKick=performance.now();
-      return true;
-    }
-    if(modes.includes("continuous")){
-      await applyAdvanced({focusMode:"continuous"});
-      lastFocusKick=performance.now();
-      return true;
-    }
-  }catch(e){/* o foco padrão do dispositivo continua ativo */}
-  return false;
+  if(!streamTrack||!streamTrack.applyConstraints)return false;
+  try{await streamTrack.applyConstraints({advanced:[settings]});return true;}catch(e){return false;}
 }
 async function setupCameraControls(track){
   cameraCaps=null;const info=$("camInfo"),fm=$("focusModeWrap"),fd=$("focusDistanceWrap"),zw=$("zoomWrap"),sel=$("focusMode"),focus=$("focusDistance"),zoom=$("zoom");
@@ -333,129 +350,108 @@ async function setupCameraControls(track){
   const modes=Array.isArray(cameraCaps.focusMode)?cameraCaps.focusMode:[];
   const hasDistance=!!cameraCaps.focusDistance&&typeof cameraCaps.focusDistance.min==="number";
   const settings=track.getSettings?track.getSettings():{};
+  if(modes.includes("continuous"))await applyAdvanced({focusMode:"continuous"});
   if(modes.length){
     const available=modes.filter(m=>["continuous","single-shot","manual"].includes(m));
     available.forEach(m=>sel.add(new Option(m==="continuous"?"Autofoco contínuo":m==="single-shot"?"Foco único":"Foco manual",m)));
     fm.hidden=available.length===0;
     if(available.includes("continuous"))sel.value="continuous";else sel.value=available[0];
-    sel.onchange=async()=>{
-      try{await applyAdvanced({focusMode:sel.value});fd.hidden=!(sel.value==="manual"&&hasDistance);}
-      catch(e){info.textContent="O aparelho não aceitou a alteração do modo de foco.";}
-    };
+    sel.onchange=async()=>{await applyAdvanced({focusMode:sel.value});fd.hidden=!(sel.value==="manual"&&hasDistance);};
   }
   if(hasDistance&&modes.includes("manual")){
     setRange(focus,cameraCaps.focusDistance,settings.focusDistance);
     $("focusDistanceValue").textContent=formatDistance(Number(focus.value));
     fd.hidden=sel.value!=="manual";
     focus.oninput=()=>$("focusDistanceValue").textContent=formatDistance(Number(focus.value));
-    focus.onchange=async()=>{try{await applyAdvanced({focusMode:"manual",focusDistance:Number(focus.value)});}catch(e){info.textContent="Não foi possível aplicar a distância de foco escolhida.";}};
+    focus.onchange=()=>applyAdvanced({focusMode:"manual",focusDistance:Number(focus.value)});
   }
   if(cameraCaps.zoom&&typeof cameraCaps.zoom.min==="number"){
-    setRange(zoom,cameraCaps.zoom,settings.zoom);
-    $("zoomValue").textContent=Number(zoom.value).toFixed(1)+"×";zw.hidden=false;
+    const initZoom=cameraCaps.zoom.max>=1.5?1.5:settings.zoom||cameraCaps.zoom.min;
+    await applyAdvanced({zoom:initZoom});
+    setRange(zoom,cameraCaps.zoom,initZoom);
+    $("zoomValue").textContent=Number(initZoom).toFixed(1)+"×";zw.hidden=false;
     zoom.oninput=()=>$("zoomValue").textContent=Number(zoom.value).toFixed(1)+"×";
-    zoom.onchange=async()=>{try{await applyAdvanced({zoom:Number(zoom.value)});}catch(e){info.textContent="Não foi possível aplicar o zoom escolhido.";}};
+    zoom.onchange=()=>applyAdvanced({zoom:Number(zoom.value)});
   }
-  const notes=[];
-  if(modes.includes("continuous"))notes.push("autofoco contínuo disponível");
-  else notes.push("autofoco controlado pelo sistema; modo contínuo não exposto ao navegador");
-  if(hasDistance&&modes.includes("manual"))notes.push("foco manual disponível");
-  else notes.push("foco manual não disponibilizado por este aparelho/navegador");
-  if(cameraCaps.zoom)notes.push("zoom disponível");
-  info.textContent=notes.join(" · ");
-  if(modes.includes("continuous")){
-    const ok=await requestRefocus({temporary:false});
-    if(!ok)info.textContent+=" · O navegador não aceitou o comando de autofoco; a câmera manterá o modo automático padrão.";
-  }else{
-    info.textContent+=" · O navegador não expõe o modo contínuo; foi solicitado autofoco pelo sistema da câmera.";
-  }
+  info.textContent=(modes.includes("continuous")?"Autofoco contínuo ativo":"Autofoco nativo do aparelho")+(cameraCaps.zoom?" · Zoom disponível":"");
 }
 async function handleRefocus(){
   if(!streamTrack)return;
-  const ok=await requestRefocus({temporary:true});
-  if(ok){
-    focusReadyAt=Math.max(focusReadyAt,performance.now()+800);
-    $("st").textContent="Solicitando novo foco. Mantenha a folha parada por um instante…";
-  }else{
-    $("camInfo").textContent+=" · Este navegador não permite comandar o foco; mantenha o cartão na distância mínima da lente.";
+  const modes=cameraCaps&&cameraCaps.focusMode||[];
+  if(modes.includes("single-shot")){
+    await applyAdvanced({focusMode:"single-shot"});
+    if(modes.includes("continuous"))setTimeout(()=>applyAdvanced({focusMode:"continuous"}),800);
+  }else if(modes.includes("continuous")){
+    await applyAdvanced({focusMode:"continuous"});
   }
+  $("st").textContent="Reajustando foco…";
 }
 $("refocus").onclick=handleRefocus;
-// Tocar na prévia solicita refoco. Não define uma região de foco, pois isso não é exposto
-// de forma padronizada pela câmera web, mas provoca uma nova tentativa de autofoco.
 box.addEventListener("click",handleRefocus);
 
 // ---------- câmera ao vivo ----------
 function guide(w,h){let gw=w*.78,gh=gw/1.03;if(gh>h*.88){gh=h*.88;gw=gh*1.03}const x=(w-gw)/2,y=(h-gh)/2;return[{x,y},{x:x+gw,y},{x:x+gw,y:y+gh},{x,y:y+gh}]}
 function sq(P,s,c,fill){octx.strokeStyle=c;octx.fillStyle=c;octx.lineWidth=1.6;P.forEach(p=>{if(fill){octx.globalAlpha=.45;octx.fillRect(p.x-s/2,p.y-s/2,s,s);octx.globalAlpha=1}octx.strokeRect(p.x-s/2,p.y-s/2,s,s)})}
-function markersInsideFrame(q,w,h){
-  const mx=w*.018,my=h*.018;
-  return q.every(p=>p.x>=mx&&p.x<=w-mx&&p.y>=my&&p.y<=h-my);
-}
+function markersInsideFrame(q,w,h){const mx=w*.02,my=h*.02;return q.every(p=>p.x>=mx&&p.x<=w-mx&&p.y>=my&&p.y<=h-my);}
+
 async function start(){
   $("res").style.display="none";$("cameraArea").style.display="block";$("saveReport").disabled=true;$("printReport").disabled=true;lastCorrection=null;stable=0;prev=null;
   try{
-    const constraints={audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:30},focusMode:{ideal:"continuous"},advanced:[{focusMode:"continuous"}]}};
-    vid.srcObject=await navigator.mediaDevices.getUserMedia(constraints);await vid.play();
+    // Sem focusMode no getUserMedia para não travar o autofoco nativo
+    vid.srcObject=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}});
+    await vid.play();
     streamTrack=vid.srcObject.getVideoTracks()[0];const vw=vid.videoWidth,vh=vid.videoHeight;
     box.style.aspectRatio=vw+"/"+vh;dh=Math.round(dw*vh/vw);dc.width=dw;dc.height=dh;ov.width=640;ov.height=Math.round(640*vh/vw);
     await setupCameraControls(streamTrack);
-    // Dá tempo para o autofoco contínuo procurar nitidez antes de permitir a captura automática.
-    focusReadyAt=performance.now()+1800;lastFocusKick=performance.now();
-    running=true;$("st").textContent="Autofoco ativado. Mantenha o cartão inteiro visível; os marcadores serão localizados automaticamente.";tick();
-  }catch(e){$("st").textContent="Câmera bloqueada ou indisponível ("+(e&&e.name||"erro")+"). Use “Enviar foto” para fotografar o cartão.";$("camInfo").textContent="Verifique a permissão de câmera e use HTTPS ou localhost.";}
+    running=true;$("st").textContent="Enquadre os 4 quadrados pretos do cartão.";tick();
+  }catch(e){$("st").textContent="Câmera indisponível ("+(e&&e.name||"erro")+"). Use “Enviar foto da prova”.";}
 }
+
 function tick(){
   if(!running)return;const t0=performance.now();
   dctx.drawImage(vid,0,0,dw,dh);
-  const q=findCorners(dctx.getImageData(0,0,dw,dh).data,dw,dh),G=guide(dw,dh),now=performance.now();
+  const q=findCorners(dctx.getImageData(0,0,dw,dh).data,dw,dh),G=guide(dw,dh);
   const f=ov.width/dw;octx.setTransform(f,0,0,f,0,0);octx.clearRect(0,0,dw,dh);
-  // O guia é apenas uma referência de enquadramento: os marcadores físicos não precisam
-  // coincidir com os quadrados desenhados na tela.
   sq(G,dist(G[0],G[1])*.047,q?"#16a34a":"#ffffff",false);
   if(q){
     const side=dist(q[0],q[1]),sz=side/dw,inside=markersInsideFrame(q,dw,dh);
-    sq(q,side*.047,q.confidence>.30?"#16a34a":"#d97706",true);
+    const sharpOk=q.sharp>9;
+    sq(q,side*.047,sharpOk&&inside?"#16a34a":"#d97706",true);
     const moved=prev?Math.max(...q.map((p,i)=>dist(p,prev[i]))):Infinity;
-    const detectionValid=q.confidence>.28&&sz>.34&&inside;
-    // Quando os marcadores aparecem pouco definidos, pede uma nova tentativa de foco
-    // sem interromper a detecção. O intervalo evita comandos repetidos à câmera.
-    if(q.confidence<.36&&now-lastFocusKick>3200)requestRefocus({temporary:true});
-    const steady=detectionValid&&prev&&moved<dw*.018;
-    stable=steady&&now>=focusReadyAt?stable+1:0;prev=q;
-    if(!inside)$("st").textContent="Encontrei os marcadores, mas algum está cortado pela imagem. Afaste um pouco o celular e enquadre a folha inteira.";
-    else if(!detectionValid)$("st").textContent="Encontrei possíveis marcadores. Ajuste a distância e a iluminação para confirmar os quatro cantos.";
-    else if(now<focusReadyAt)$("st").textContent="Marcadores reconhecidos. O autofoco está ajustando a nitidez…";
-    else $("st").textContent="Quatro marcadores reconhecidos automaticamente. Mantenha a folha parada… "+Math.min(stable,5)+"/5";
-    if(stable>=5){capture(q);return;}
-  }else{stable=0;prev=null;$("st").textContent="Procure manter os quatro marcadores pretos visíveis. Os quadrados brancos são apenas um guia; não precisam coincidir com os marcadores.";}
-  setTimeout(tick,Math.max(0,120-(performance.now()-t0)));
+    const steady=inside&&sz>.36&&sharpOk&&moved<dw*.018;
+    stable=steady?stable+1:0;prev=q;
+    if(!inside)$("st").textContent="Afaste um pouco para enquadrar os 4 marcadores inteiros.";
+    else if(!sharpOk)$("st").textContent="Foco borrado. Afaste um pouco o celular (use o Zoom nos controles).";
+    else if(sz<=.36)$("st").textContent="Aproxime um pouco mais o cartão.";
+    else $("st").textContent="Foco nítido! Segure firme… "+Math.min(stable,4)+"/4";
+    if(stable>=4){capture(q);return;}
+  }else{stable=0;prev=null;$("st").textContent="Enquadre os 4 quadrados pretos do cartão.";}
+  setTimeout(tick,Math.max(0,110-(performance.now()-t0)));
 }
+
 function capture(q){
   running=false;const W=vid.videoWidth,H=vid.videoHeight,cv=document.createElement("canvas");cv.width=W;cv.height=H;cv.getContext("2d").drawImage(vid,0,0);
-  const rw=1200,rh=Math.round(rw*H/W),rc=document.createElement("canvas");rc.width=rw;rc.height=rh;
+  const rw=1000,rh=Math.round(rw*H/W),rc=document.createElement("canvas");rc.width=rw;rc.height=rh;
   const rx=rc.getContext("2d",{willReadFrequently:true});rx.drawImage(cv,0,0,rw,rh);
   const r=findCorners(rx.getImageData(0,0,rw,rh).data,rw,rh);
-  const finalQ=r?r.map(p=>({x:p.x*W/rw,y:p.y*H/rh})):q.map(p=>({x:p.x*W/dw,y:p.y*H/dh}));
-  show(cv,finalQ,W,H);
+  show(cv,r?r.map(p=>({x:p.x*W/rw,y:p.y*H/rh})):q.map(p=>({x:p.x*W/dw,y:p.y*H/dh})),W,H);
 }
 
 // ---------- foto enviada ----------
 $("file").onchange=e=>{
   const f=e.target.files[0];if(!f)return;const im=new Image();
   im.onload=()=>{
-    const s=Math.min(1,2400/Math.max(im.width,im.height)),W=Math.round(im.width*s),H=Math.round(im.height*s),cv=document.createElement("canvas");cv.width=W;cv.height=H;cv.getContext("2d").drawImage(im,0,0,W,H);
-    const sw=1200,sh=Math.round(sw*H/W),sc=document.createElement("canvas");sc.width=sw;sc.height=sh;const sx=sc.getContext("2d",{willReadFrequently:true});sx.drawImage(im,0,0,sw,sh);
+    const s=Math.min(1,2200/Math.max(im.width,im.height)),W=Math.round(im.width*s),H=Math.round(im.height*s),cv=document.createElement("canvas");cv.width=W;cv.height=H;cv.getContext("2d").drawImage(im,0,0,W,H);
+    const sw=1000,sh=Math.round(sw*H/W),sc=document.createElement("canvas");sc.width=sw;sc.height=sh;const sx=sc.getContext("2d",{willReadFrequently:true});sx.drawImage(im,0,0,sw,sh);
     const q=findCorners(sx.getImageData(0,0,sw,sh).data,sw,sh);
-    if(!q){$("st").textContent="Não confirmei os quatro marcadores nessa foto. Enquadre o cartão inteiro, sem cortes, e tente novamente.";return;}
+    if(!q){$("st").textContent="Não confirmei os 4 marcadores nessa foto. Enquadre o cartão inteiro e tente novamente.";return;}
     stopCam();show(cv,q.map(p=>({x:p.x*W/sw,y:p.y*H/sh})),W,H);
   };
-  im.onerror=()=>$("st").textContent="Não foi possível abrir a imagem selecionada.";
   im.src=URL.createObjectURL(f);e.target.value="";
 };
 $("again").onclick=start;
 if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)start();
-else $("st").textContent="Este navegador não oferece acesso à câmera. Use “Enviar foto” ou abra a página em HTTPS.";
+else $("st").textContent="Este navegador não oferece acesso à câmera. Use “Enviar foto da prova”.";
 </script>
 </body>
 </html>
