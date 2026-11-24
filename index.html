@@ -65,7 +65,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
           <input id="zoom" type="range">
         </label>
         <div class="row"><button id="refocus" type="button">Reajustar foco</button></div>
-        <div class="hint">O foco manual e o zoom só aparecem quando são expostos pelo navegador e pela câmera. O zoom pode ser digital; aproximar fisicamente o celular continua dependendo da distância mínima de foco da lente.</div>
+        <div class="hint">O programa prioriza o autofoco contínuo. Toque na imagem da câmera ou em “Reajustar foco” para solicitar uma nova tentativa. O foco manual e o zoom só aparecem quando são oferecidos pelo aparelho. O zoom pode ser digital; respeite a distância mínima de foco da lente.</div>
       </div>
     </details>
   </div>
@@ -100,6 +100,7 @@ const $=id=>document.getElementById(id),vid=$("vid"),ov=$("ov"),octx=ov.getConte
 const dw=480;let dh=360;
 const dc=document.createElement("canvas"),dctx=dc.getContext("2d",{willReadFrequently:true});
 let N=20,KEY="CACDBABCCACBDBCDBDAC".split(""),EXAM_VALUE=10,running=false,stable=0,prev=null,streamTrack=null,cameraCaps=null,lastCorrection=null;
+let focusReadyAt=0,lastFocusKick=0;
 try{const s=JSON.parse(localStorage.getItem("gab")||"null");if(s&&Array.isArray(s.key)&&s.key.length===20&&s.key.every(l=>"ABCDE".includes(l))&&s.n>=1&&s.n<=20){KEY=s.key;N=s.n}if(s&&Number.isFinite(Number(s.examValue))&&Number(s.examValue)>0)EXAM_VALUE=Number(s.examValue)}catch(e){}
 const save=()=>{try{localStorage.setItem("gab",JSON.stringify({n:N,key:KEY,examValue:EXAM_VALUE}))}catch(e){}};
 const K=()=>KEY.slice(0,N);
@@ -273,7 +274,33 @@ function formatDistance(v){return v<1?(v*100).toFixed(1)+" cm":v.toFixed(2)+" m"
 function setRange(el,cap,value){el.min=cap.min;el.max=cap.max;el.step=cap.step||"any";el.value=value??cap.min}
 async function applyAdvanced(settings){
   if(!streamTrack||!streamTrack.applyConstraints)throw new Error("Controles não disponíveis");
-  await streamTrack.applyConstraints({advanced:[settings]});
+  try{
+    await streamTrack.applyConstraints({advanced:[settings]});
+  }catch(firstError){
+    // Alguns navegadores aceitam focusMode como restrição ideal, mas não em advanced.
+    if(settings.focusMode)await streamTrack.applyConstraints({focusMode:{ideal:settings.focusMode}});
+    else throw firstError;
+  }
+}
+async function requestRefocus({temporary=true}={}){
+  if(!streamTrack)return false;
+  const modes=cameraCaps&&cameraCaps.focusMode||[];
+  lastFocusKick=performance.now();
+  try{
+    // Prefere foco único para provocar uma nova busca e retorna ao contínuo.
+    if(temporary&&modes.includes("single-shot")){
+      await applyAdvanced({focusMode:"single-shot"});
+      if(modes.includes("continuous"))setTimeout(()=>applyAdvanced({focusMode:"continuous"}).catch(()=>{}),700);
+      lastFocusKick=performance.now();
+      return true;
+    }
+    if(modes.includes("continuous")){
+      await applyAdvanced({focusMode:"continuous"});
+      lastFocusKick=performance.now();
+      return true;
+    }
+  }catch(e){/* o foco padrão do dispositivo continua ativo */}
+  return false;
 }
 async function setupCameraControls(track){
   cameraCaps=null;const info=$("camInfo"),fm=$("focusModeWrap"),fd=$("focusDistanceWrap"),zw=$("zoomWrap"),sel=$("focusMode"),focus=$("focusDistance"),zoom=$("zoom");
@@ -312,46 +339,72 @@ async function setupCameraControls(track){
   else notes.push("foco manual não disponibilizado por este aparelho/navegador");
   if(cameraCaps.zoom)notes.push("zoom disponível");
   info.textContent=notes.join(" · ");
-  if(modes.includes("continuous")){try{await applyAdvanced({focusMode:"continuous"});}catch(e){/* mantém o foco padrão do dispositivo */}}
+  if(modes.includes("continuous")){
+    const ok=await requestRefocus({temporary:false});
+    if(!ok)info.textContent+=" · O navegador não aceitou o comando de autofoco; a câmera manterá o modo automático padrão.";
+  }else{
+    info.textContent+=" · O navegador não expõe o modo contínuo; foi solicitado autofoco pelo sistema da câmera.";
+  }
 }
-$("refocus").onclick=async()=>{
+async function handleRefocus(){
   if(!streamTrack)return;
-  const info=$("camInfo"),modes=cameraCaps&&cameraCaps.focusMode||[];
-  try{
-    if(modes.includes("single-shot")){await applyAdvanced({focusMode:"single-shot"});if(modes.includes("continuous"))setTimeout(()=>applyAdvanced({focusMode:"continuous"}).catch(()=>{}),900);}
-    else if(modes.includes("continuous"))await applyAdvanced({focusMode:"continuous"});
-    else info.textContent="Este aparelho não permite solicitar o foco manualmente pelo navegador. Mantenha o cartão dentro da distância mínima da lente e toque na tela do aplicativo de câmera, caso esteja usando a câmera nativa.";
-  }catch(e){info.textContent="O navegador não conseguiu solicitar um novo foco. A câmera continuará usando o foco automático padrão.";}
-};
+  const ok=await requestRefocus({temporary:true});
+  if(ok){
+    focusReadyAt=Math.max(focusReadyAt,performance.now()+800);
+    $("st").textContent="Solicitando novo foco. Mantenha a folha parada por um instante…";
+  }else{
+    $("camInfo").textContent+=" · Este navegador não permite comandar o foco; mantenha o cartão na distância mínima da lente.";
+  }
+}
+$("refocus").onclick=handleRefocus;
+// Tocar na prévia solicita refoco. Não define uma região de foco, pois isso não é exposto
+// de forma padronizada pela câmera web, mas provoca uma nova tentativa de autofoco.
+box.addEventListener("click",handleRefocus);
 
 // ---------- câmera ao vivo ----------
 function guide(w,h){let gw=w*.78,gh=gw/1.03;if(gh>h*.88){gh=h*.88;gw=gh*1.03}const x=(w-gw)/2,y=(h-gh)/2;return[{x,y},{x:x+gw,y},{x:x+gw,y:y+gh},{x,y:y+gh}]}
 function sq(P,s,c,fill){octx.strokeStyle=c;octx.fillStyle=c;octx.lineWidth=1.6;P.forEach(p=>{if(fill){octx.globalAlpha=.45;octx.fillRect(p.x-s/2,p.y-s/2,s,s);octx.globalAlpha=1}octx.strokeRect(p.x-s/2,p.y-s/2,s,s)})}
+function markersInsideFrame(q,w,h){
+  const mx=w*.018,my=h*.018;
+  return q.every(p=>p.x>=mx&&p.x<=w-mx&&p.y>=my&&p.y<=h-my);
+}
 async function start(){
   $("res").style.display="none";$("cameraArea").style.display="block";$("saveReport").disabled=true;$("printReport").disabled=true;lastCorrection=null;stable=0;prev=null;
   try{
-    const constraints={audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:30}}};
+    const constraints={audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:30},focusMode:{ideal:"continuous"},advanced:[{focusMode:"continuous"}]}};
     vid.srcObject=await navigator.mediaDevices.getUserMedia(constraints);await vid.play();
     streamTrack=vid.srcObject.getVideoTracks()[0];const vw=vid.videoWidth,vh=vid.videoHeight;
     box.style.aspectRatio=vw+"/"+vh;dh=Math.round(dw*vh/vw);dc.width=dw;dc.height=dh;ov.width=640;ov.height=Math.round(640*vh/vw);
-    await setupCameraControls(streamTrack);running=true;$("st").textContent="Encaixe os quatro quadrados pretos do cartão nos cantos do guia.";tick();
+    await setupCameraControls(streamTrack);
+    // Dá tempo para o autofoco contínuo procurar nitidez antes de permitir a captura automática.
+    focusReadyAt=performance.now()+1800;lastFocusKick=performance.now();
+    running=true;$("st").textContent="Autofoco ativado. Mantenha o cartão inteiro visível; os marcadores serão localizados automaticamente.";tick();
   }catch(e){$("st").textContent="Câmera bloqueada ou indisponível ("+(e&&e.name||"erro")+"). Use “Enviar foto” para fotografar o cartão.";$("camInfo").textContent="Verifique a permissão de câmera e use HTTPS ou localhost.";}
 }
 function tick(){
   if(!running)return;const t0=performance.now();
-  dctx.drawImage(vid,0,0,dw,dh);const q=findCorners(dctx.getImageData(0,0,dw,dh).data,dw,dh),G=guide(dw,dh);
+  dctx.drawImage(vid,0,0,dw,dh);
+  const q=findCorners(dctx.getImageData(0,0,dw,dh).data,dw,dh),G=guide(dw,dh),now=performance.now();
   const f=ov.width/dw;octx.setTransform(f,0,0,f,0,0);octx.clearRect(0,0,dw,dh);
-  const near=!!q&&q.every((p,i)=>dist(p,G[i])<dw*.12);
-  sq(G,dist(G[0],G[1])*.047,near?"#16a34a":"#ffffff",false);
+  // O guia é apenas uma referência de enquadramento: os marcadores físicos não precisam
+  // coincidir com os quadrados desenhados na tela.
+  sq(G,dist(G[0],G[1])*.047,q?"#16a34a":"#ffffff",false);
   if(q){
-    const side=dist(q[0],q[1]),sz=side/dw;sq(q,side*.047,q.confidence>.45?"#16a34a":"#d97706",true);
-    const moved=prev?Math.max(...q.map((p,i)=>dist(p,prev[i]))):99;
-    stable=near&&q.confidence>.35&&moved<dw*.012&&sz>.45?stable+1:0;prev=q;
-    if(!near)$("st").textContent="Quatro possíveis marcadores encontrados. Ajuste a posição e o tamanho até coincidirem com o guia.";
-    else if(q.confidence<.35)$("st").textContent="Detecção pouco confiável. Melhore a iluminação e deixe o cartão mais nítido.";
-    else $("st").textContent="Quatro marcadores confirmados. Mantenha o cartão parado… "+Math.min(stable,5)+"/5";
+    const side=dist(q[0],q[1]),sz=side/dw,inside=markersInsideFrame(q,dw,dh);
+    sq(q,side*.047,q.confidence>.30?"#16a34a":"#d97706",true);
+    const moved=prev?Math.max(...q.map((p,i)=>dist(p,prev[i]))):Infinity;
+    const detectionValid=q.confidence>.28&&sz>.34&&inside;
+    // Quando os marcadores aparecem pouco definidos, pede uma nova tentativa de foco
+    // sem interromper a detecção. O intervalo evita comandos repetidos à câmera.
+    if(q.confidence<.36&&now-lastFocusKick>3200)requestRefocus({temporary:true});
+    const steady=detectionValid&&prev&&moved<dw*.018;
+    stable=steady&&now>=focusReadyAt?stable+1:0;prev=q;
+    if(!inside)$("st").textContent="Encontrei os marcadores, mas algum está cortado pela imagem. Afaste um pouco o celular e enquadre a folha inteira.";
+    else if(!detectionValid)$("st").textContent="Encontrei possíveis marcadores. Ajuste a distância e a iluminação para confirmar os quatro cantos.";
+    else if(now<focusReadyAt)$("st").textContent="Marcadores reconhecidos. O autofoco está ajustando a nitidez…";
+    else $("st").textContent="Quatro marcadores reconhecidos automaticamente. Mantenha a folha parada… "+Math.min(stable,5)+"/5";
     if(stable>=5){capture(q);return;}
-  }else{stable=0;prev=null;$("st").textContent="Não confirmei quatro quadrados compatíveis. Afaste objetos escuros do enquadramento, melhore a luz e enquadre o cartão inteiro.";}
+  }else{stable=0;prev=null;$("st").textContent="Procure manter os quatro marcadores pretos visíveis. Os quadrados brancos são apenas um guia; não precisam coincidir com os marcadores.";}
   setTimeout(tick,Math.max(0,120-(performance.now()-t0)));
 }
 function capture(q){
